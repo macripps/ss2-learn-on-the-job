@@ -1,0 +1,14 @@
+# Local working data: copyrighted game/mod files and anything derived from them.
+# Recreate with: bash tools/setup.sh
+/extracted/
+/decompiled/
+
+# Build output (dist/SS2LearnOnTheJob.zip is the file uploaded to Nexus)
+/build/
+/dist/
+
+# Machine-specific overrides for tools/paths.sh
+/tools/paths.local.sh
+
+__pycache__/
+*.pyc

@@ -11,6 +11,11 @@ String sLogName = "LearningOnTheJob"
 Int iMyVersion = 1 Const
 Int iTimerID_Recalculate = 102 Const
 
+Int Settler_Updated = 1 Const
+Int Settler_ReachedCap = 0 Const
+Int Settler_NoJob = -1 Const
+Int Settler_JobUnknown = -3 Const
+
 Event OnQuestInit()
   InstallModChanges()
   StartTimerGameTime(24, iTimerID_Recalculate)
@@ -74,18 +79,13 @@ Function HandleRecalculation()
   bUpdateInProcess = False
 EndFunction
 
-Int Settler_Updated = 1 Const
-Int Settler_ReachedCap = 0 Const
-Int Settler_NoJob = -1 Const
-Int Settler_JobUnknown = -3 Const
-
 Function HandleWorkshop(WorkshopScript akCurrentWorkshop, SimSettlementsV2:Quests:NPC_RPGManager akSS2RPGManager, Keyword akLinkKeyword, Keyword akJobAssignmentKeyword, SimSettlementsV2:DataStructures:PlotSpecialStatAdjustment[] akPlotSpecialStatAdjustments, SimSettlementsV2:DataStructures:StatTraining[] akStatTraining)
   Actor[] allSettlers = akSS2RPGManager.GetSettlers(akCurrentWorkshop, True)
   if allSettlers.Length == 0
     Return
   EndIf
 
-  Log("Started Workshop " + akCurrentWorkshop + " - " + allSettlers.Length + " settlers.")
+  Log("Started Workshop " + akCurrentWorkshop + "/" + akCurrentWorkshop.myLocation + " - " + allSettlers.Length + " settlers.")
   Float maxProgress = akSS2RPGManager.GetStatTrainingTimeNeeded(iMaxLevel, akCurrentWorkshop)
 
   int currentSettler = 0
@@ -109,7 +109,7 @@ Function HandleWorkshop(WorkshopScript akCurrentWorkshop, SimSettlementsV2:Quest
     EndIf
     currentSettler += 1
   EndWhile
-  Log("Finished Workshop " + akCurrentWorkshop.GetFormID() + " (" + settlersUpdated + " updated/" + settlersNoJob + " no job/" + settlersJobUnknown + " unknown job/" + settlersReachedCap + " at max level)")
+  Log("Finished Workshop " + akCurrentWorkshop + " (" + settlersUpdated + " updated/" + settlersNoJob + " no job/" + settlersJobUnknown + " unknown job/" + settlersReachedCap + " at max level)")
 EndFunction
 
 Int Function HandleSettler(Actor akSettler, WorkshopScript akCurrentWorkshop, SimSettlementsV2:Quests:NPC_RPGManager akSS2RPGManager, Keyword akLinkKeyword, Keyword akJobAssignmentKeyword, SimSettlementsV2:DataStructures:PlotSpecialStatAdjustment[] akPlotSpecialStatAdjustments, SimSettlementsV2:DataStructures:StatTraining[] akStatTraining, Float maxProgress)

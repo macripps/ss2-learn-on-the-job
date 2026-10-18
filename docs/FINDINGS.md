@@ -57,6 +57,15 @@ There is no generic settler XP. Settlers have SPECIAL stats; recreation
   every workshop; also runs on entering a settlement (`HandlePlayerEnteredSettlement`).
 - Training starts/stops from `UpdateSettlerTrainingStatus` on WorkshopParent's
   assigned/unassigned events — only for plots whose config has `AssignmentType_Leisure`.
+- SS2's daily `TrainSettlementSettlers` → `TrainSettlers` calls `ProcessTraining` for **every** settler
+  (`GetSettlers(ws, True)`), not only those at a training plot, then `UpdateSettlerPlotBonuses` if a stat rose. So
+  progress added by another mod is turned into a stat increase by SS2's next daily pass without that mod calling
+  `ProcessTraining`. Extra calls don't double-count gym time: after adding elapsed time, SS2 resets the timestamp to now.
+  `ProcessTraining` raises each stat at most +1 per call (an `If`, not a loop), and keeps current damage/buffs on the
+  stat when it does.
+- SS2's daily training loop (`OnTimerGameTime`, ~line 391) iterates **all** of `WorkshopParent.Workshops` with no
+  `OwnedByPlayer` or population check, and `GrabNPCs` has no ownership filter either. So SS2 trains settlers in
+  settlements the player doesn't own (e.g. SS2 pre-built city plans). Filtering on `OwnedByPlayer` would skip those.
 - `GetSettlers(workshop, abIncludePermanent)` delegates to `SimSettlementsV2:Quests:MI:GrabNPCs`
   (sends a story event and waits — not free, so call it at most daily per settlement).
 
@@ -76,6 +85,12 @@ A plot's class is `simplot.GetParentBuildingPlan().ClassKeyword`. Decoded from 3
 | Municipal_WaterPlant_*, Municipal_Sanitation | Perception |
 
 (Luck has no job.) Reading this list at runtime means add-on classes work automatically.
+
+The 3.8.0 table has 58 entries, and a class keyword can repeat (up to 9 times, e.g. 0x01840B / 0x018409): one row per
+`ResourceAV` (each crop, etc.). Every repeat checked has the **same** `SpecialStatAV`. So the first `FindStruct` match
+gives the stat. Crediting once per *matching row* would multiply progress by up to 9×. Add-ons could in principle map
+one class to two different stats; v1 doesn't handle that. (Decoded with `esp_inspect.py ... find-script
+SimSettlementsV2:Quests:PlotManager`.)
 Settings can also add `BehaviorModifiers` (type 8) per settlement — ignored for now.
 
 ## Useful SS2 member signatures (verified against 3.8.0 decompile)
@@ -89,6 +104,11 @@ Settings can also add `BehaviorModifiers` (type 8) per settlement — ignored fo
 - `SimSettlementsV2:Weapons:BuildingPlan` (extends Form Const): `Keyword ClassKeyword`.
 - `SimSettlementsV2:UtilityFunctions.GetLinkedPlot(ObjectReference, Keyword)` Global — resolves secondary assignment markers to their plot.
 - `ObjectReference.GetWorkshopOwnedObjects(Actor)` is a vanilla native.
+- Multi-worker plots: only the **first** worker (`PrimaryOwner`) owns the SimPlot itself. Extra workers
+  (`iOccupants > 1`) own *secondary assignment markers*, separate workshop objects that link back to the plot
+  (`SimPlot.UpdateOccupants`, ~line 924). `GetLinkedPlot(marker, SecondaryAssignmentMarkerLinkKeyword)` follows
+  `GetLinkedRef` to a `PlotLinkHolder` and returns its plot, or None. SS2's `NPC_AssignmentManager` uses this fallback
+  everywhere it maps owned objects to plots, right after a failed `as SimPlot` cast. Without it, 2nd+ workers get nothing.
 
 ## Design decisions
 
@@ -147,6 +167,38 @@ The plugin file stays `SS2LearnOnTheJob.esp`. Earlier sections and the first-tes
 **does not write mod script code**. The AI-written v0.1 script is kept as `reference/JobTrainingQuest.ai-draft.psc`.
 It isn't compiled (not on the import path) or shipped. The v0.1 description below refers to that draft.
 For the Nexus AI tags this implies, see `docs/NEXUS.md`.
+
+## Hand-written script: startup design (2026-10-18)
+
+Decided by Mike in the clean-room rewrite (Claude only asked questions):
+- No startup wait for SS2. The daily tick checks that SS2 is ready and returns early if not, so the AddonPack-style
+  2 s poll and the remote `OnQuestInit` registration were dropped.
+- `OnQuestInit` (runs once per save) starts the first 24 h game-time timer and registers for the player's
+  `OnPlayerLoadGame`. Timers and remote-event registrations are saved, so neither is repeated on load.
+  (Starting a timer on every load would restart it and could postpone the tick indefinitely.)
+- The tick re-arms its timer at the start, so an early return can't break the chain. Game-time timers deliver
+  `OnTimerGameTime`, not `OnTimer`; using the wrong one compiles but never fires.
+- `Log` opens the user log on every call (the vanilla FollowersScript pattern). User logs close when the game
+  exits, and in the install session there's no `OnPlayerLoadGame`, so opening only at init or on load would lose lines.
+- Version check: `iInstalledVersion` (property, in the save) against a `Const` in the script (in the `.pex`).
+  It's set at init and checked on every load. SS2's own version isn't tracked, since there's nothing to do when it changes.
+- SS2 readiness is checked at the top of each tick: `GetFormFromFile(0x00EB6E, "SS2.esm")` cast to `NPC_RPGManager`,
+  then None check, then `IsRunning()`, each with its own log line. The lookup isn't cached across ticks. It runs once
+  a day, and a cached reference saved with the game can go stale if SS2 is removed.
+- `bUpdateInProcess` is checked and set right next to each other, after the SS2 checks, with no calls between them.
+  Papyrus only lets other events in at calls out (natives, other scripts), so check-then-set with no calls is atomic.
+- The flag is reset in `InstallModChanges`, not on every load. On a normal load a saved in-flight tick resumes. After
+  an upgrade, a stack in changed code may be discarded and leave the flag stuck. (To verify: look for discarded-stack
+  messages in `Papyrus.0.log` when testing an upgrade.)
+- Each tick credits a fixed one day × rate, not elapsed time. A game-time timer that comes due during a wait/sleep
+  fires once afterwards, but the wait menu caps at 24 h, so at most a day is lost now and then (also when a tick is
+  skipped because SS2 isn't ready). This was accepted to avoid storing a last-tick timestamp. Unlike the v0.1 draft,
+  which credited elapsed days capped at 3.
+- Per settler: find the job plot (owned objects, `as SimPlot`, else `GetLinkedPlot`; `GetPlotConfig()` has
+  `AssignmentType_Job`), then `GetParentBuildingPlan().ClassKeyword`, `FindStruct` in `PlotSpecialStatAdjustments`,
+  `FindStruct` in `TrainingMaps` by `StatAV` (the helper returns the whole `StatTraining` row: SS2's own struct,
+  read-only). Progress 0 is initialised to `GetStatTrainingTimeNeeded(GetBaseValue(stat), workshop)` in a local, then
+  one `SetValue` writes init + increment. `ProcessTraining` is never called: SS2's daily pass promotes.
 
 ## Implementation (v0.1 AI draft, 2026-10-17)
 
@@ -227,13 +279,15 @@ Problems:
 ## Testing checklist
 
 1. Install `dist/SS2LearnOnTheJob.zip` in MO2 and enable it after SS2. Load a save with SS2 settlements.
-2. Console: `sqv SS2LOJ_JobTrainingQuest` → should be running, with `fJobTrainingRate` 0.25.
-3. Speed up for testing: `setpqv SS2LOJ_JobTrainingQuest fJobTrainingRate 20` and
-   `setpqv SS2LOJ_JobTrainingQuest bDebugLogging 1`, then wait 24h (the first tick fires 24 game hours
-   after install and credits the time since install). A farmer's Endurance should rise. Log:
-   `Documents\My Games\Fallout4\Logs\Script\User\SS2LearnOnTheJob.0.log`
+2. Console: `sqv AISS2LOJ_JobTrainingQuest` → should be running, with `fDailyProgress` 0.25 and `iMaxLevel` 10.
+3. Speed up for testing: `setpqv AISS2LOJ_JobTrainingQuest fDailyProgress 20` and
+   `setpqv AISS2LOJ_JobTrainingQuest bLoggingEnabled 1`, then wait 24h (the first tick fires 24 game hours
+   after install). Our tick only adds progress. The stat rises on **SS2's** next daily pass, so wait another 24h
+   before expecting a farmer's Endurance to go up. Log:
+   `Documents\My Games\Fallout4\Logs\Script\User\LearningOnTheJob.0.log`
    (needs `bEnableLogging=1` and `bEnableTrace=1` under `[Papyrus]` in Fallout4Custom.ini).
 4. Set the rate back to 0.25 afterwards.
+(Steps 2–3 are for the hand-written script. The v0.1 first-test notes above use the draft's names.)
 
 ## Ideas / open questions
 
@@ -241,3 +295,28 @@ Problems:
 - Jobs with no stat mapping (some add-on classes, HQ departments, caravans) get nothing; could fall back on plot type.
 - SoldierXP for Martial jobs (guards) would use `GetXPEarnedTraining` / `TryToRankUpSoldier`: different math, not done.
 - After each SS2 update, re-check the training functions in `npc_rpgmanager.psc` and the `TrainingTimes` values.
+
+## Editor setup (VS Code)
+
+- The VS Code "Papyrus" extension (joelday) reports "Script is not included in a Papyrus project or any of
+  Creation Kit's configured paths" for scripts outside the CK's Data/Scripts/Source folders. The usual fix is a
+  Papyrus project file (.ppj) in the workspace; the extension reads its Imports for autocomplete and go-to-definition.
+- SS2LearnOnTheJob.ppj at the repo root is that file, and tools/build.sh compiles through it, so the editor and the
+  build always share one import list (source/scripts; source/stubs; extracted/papyrus-base).
+- The CK's PapyrusCompiler 2.8.0.4 rejects Pyro's Game="fo4" attribute ("The 'Game' attribute is not declared"),
+  so the project file leaves it out. Relative paths resolve from the working directory (build.sh cds to the repo root).
+- The project lists the scripts with <Folders><Folder>source/scripts</Folder></Folders>, not
+  <Script>Namespace:Name</Script>: the extension's language server (3.2.0, .NET Framework) passes Script entries to
+  Path.GetFullPath, which throws "The given path's format is not supported" on the colon. VS Code then says
+  "No Papyrus Language Servers are running". The error shows in the "Papyrus (Fallout 4)" output channel.
+  The CK compiler accepts the folder form too, and new scripts get picked up automatically.
+- The separate mr-andersen "Papyrus Compiler" extension (0.1.1) needs mrandersen.papyrus.compiler.projectFile for
+  "Compile Project". Every one of its compile commands also passes -f/-i/-o from settings, and those point at the game
+  folders by default. That would compile without our stubs and write .pex into the game's Data/Scripts.
+  .vscode/settings.json overrides them for this workspace with relative paths matching the .ppj (its terminal
+  starts in the workspace root). The compiler path is left to user settings.
+- The Papyrus extension's Pyro task provider warns "Could not find a ppj file in this workspace with a game type
+  specified" whenever VS Code collects tasks. It XML-parses the .ppj and needs PapyrusProject's Game attribute,
+  which the CK compiler rejects, so one file can't satisfy both. The workspace sets task.autoDetect off instead.
+  The language server doesn't need Game. If Pyro builds are wanted later, keep a separate Pyro .ppj with Game="fo4".
+- Autocomplete only knows SS2 members that are in the stubs. Add signatures to source/stubs as you need them.

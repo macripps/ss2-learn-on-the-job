@@ -276,6 +276,58 @@ Problems:
 7. Noise, not a bug: `UnassignFromTrainingPlot … was not assigned` lines come from SS2's own handling of stats at 10.
    SS2's daily loop produces the same lines.
 
+## First in-game test of the hand-written script (2026-10-18, 21:01–21:07)
+
+Same save and profile as the v0.1 test. Rate 20, logging on, one tick.
+- **Worked, no errors.** Nothing from `AISS2LearnOnTheJob` in `Papyrus.0.log`.
+- **31 settlements, 935 settlers in 229 s** (real time). v0.1 needed 9m43s for 60 settlers and hadn't finished.
+  132 s of it is between workshops (`GetSettlers` and empty workshops) and 97 s is the per-settler work.
+- Outcomes: 492 updated, 215 no job, 170 unknown job, 58 at max (cap 10).
+- **Unknown jobs are SS2's own base classes, not add-ons**: they're missing from `PlotSpecialStatAdjustments` because
+  their output isn't stat-boosted. By count: Municipal_Hospital 34, Municipal_CaravanServices 24,
+  Municipal_Communications 21, Municipal_Cemetery 19, Martial_WatchTower 18, Municipal_PowerTransfer 16,
+  Municipal_TaxServices 12, Industrial_Production 8, Martial_OutpostType_* 15 (Armory, Prison, RecruitmentCenter,
+  FieldMedics, BattlefieldScavengers), Municipal_Default_Other 3. They're logged once per settler per day, which is noisy.
+- Some workshops show everyone as "no job" (e.g. 302096664 = 0x1201A118: 50/50; 50448042: 13/13; 83890159: 6/6).
+  Still to identify: they may be settlements without SS2 job plots.
+- Plot IDs in the log are negative decimals (`GetFormID()` on `FF…` refs), so they can't be used in the console.
+- The all-"no job" workshops: 0x1201A118 = `SS2_HQ_WorkshopRef_GNN` (SS2 HQ: staff work in departments, not plots),
+  0x0301C6AA = Echo Lake Lumber, 0x05000FEF = Vault 88, 0x03038EA8 = Dalton Farm. Mike hasn't been to Far Harbor in
+  this save, so SS2 counts settlers there from something other than the player's building (pre-built settlements or
+  pre-placed actors?). `GrabNPCs.GetSettlers` gathers actors by a story event on `myLocation` plus permanent workshop
+  actors, with no ownership or visited check. Harmless to us: no job means nothing is written.
+- **End-to-end confirmed (second run, same evening).** Farmer FF04A044: Endurance progress 0 → 21 (init 1 + 20) →
+  41 after the next tick. Endurance stayed 1 until SS2 processed them. Entering the settlement (21:41:38) started
+  SS2's `TrainSettlers` entry pass, which ran at about **4 settlers per real minute**. It reached FF04A044 at 21:52:08
+  (`ProcessTraining` line in `SS2RPGManager.0.log`) and `getbaseav Endurance` showed 2. SS2 logs nothing for the +1
+  itself. So promotion lags by up to a game day *plus* however long SS2's pass takes to reach the settler.
+- No full SS2 daily pass was visible during the test window (93 `ProcessTraining` calls in ~20 min). SS2's
+  `GetSettlers` doesn't log, so we can't tell whether its daily timer didn't fire or its lookups came back empty.
+  `GrabNPCs` failures from SS2's DisasterManager appear within seconds of both our tick starts, so the NPC-grabber
+  quest pool is shared by several callers. Our tick may compete with SS2's passes for it. Not yet measured.
+- **Decision (Mike): keep `GetSettlers`.** The grabber pool is built for concurrent callers (random caller IDs), and
+  many SS2 systems share it. Risk accepted: a failed lookup on an unloaded settlement returns an empty array, so that
+  settlement silently gets no progress that day. Alternative considered, not adopted: workshop → plots → workers via
+  `PlotManager.GetSettlementPlots(ws, False)` (unloaded: one `GetLinkedRefChildren(WorkshopItemKeyword)` native call,
+  no story event) and `SimPlot.GetAllAssignedNPCs(True)` (primary + secondary-marker workers). Unmeasured.
+- Locations convert to strings without editor IDs (`[Location < (0300F101)>]`), unlike keywords.
+- **Decision (Mike):** jobs whose class isn't in `PlotSpecialStatAdjustments` (Municipal, watchtower/outposts,
+  Industrial_Production) get nothing. The mod is for early-game farms, shops and factories. Mention it in the Nexus
+  description.
+
+## Why the hand-written script is faster than v0.1 (comparison, 2026-10-18)
+
+Not a controlled benchmark: v0.1 only did player-owned settlements (60 settlers, more than 9m43s and unfinished,
+at least ~10 s/settler). The hand-written script did 935 settlers in 229 s (~0.25 s/settler). Differences per settler:
+- v0.1 read properties on SS2's quests for every settler (`RPGManager.AssignmentType_Job`,
+  `RPGManager.PlotManager.PlotSpecialStatAdjustments`, `RPGManager.TrainingMaps`, `iMaxStatValue` per stat, the link
+  keyword per owned object). Each is a call into SS2's busy script objects, and a Papyrus object handles one call at a
+  time, so these can queue behind SS2's own passes. The new script reads them once per tick into locals.
+- v0.1 called `ProcessTraining` for every credited settler, plus `UpdateSettlerPlotBonuses` when it returned true. The
+  new script never calls them: SS2's own pass promotes.
+- v0.1 called `GetBaseValue`, `IsDead` and `HasKeyword` every time, looped over all 58 table rows, and built a per-settler
+  log string even with logging off (arguments are evaluated before `Log` checks the flag).
+
 ## Testing checklist
 
 1. Install `dist/SS2LearnOnTheJob.zip` in MO2 and enable it after SS2. Load a save with SS2 settlements.

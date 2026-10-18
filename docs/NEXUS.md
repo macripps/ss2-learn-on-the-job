@@ -1,5 +1,8 @@
 # Releasing on Nexus Mods
 
+**Status:** first version published on Nexus on 2026-10-18 by Mike. He wrote the page text and took the screenshot,
+and tagged it *AI Assisted*. The description draft below is kept for reference only.
+
 Researched 2026-10-17. Nexus blocks automated page fetches, so the page-form details below come from the
 help centre plus what's visible in your existing downloads' metadata. Double-check field names on the
 live upload form.
@@ -105,25 +108,33 @@ their day job counts too: a little of that training happens at work.
 
 [b]How it works[/b]
 [list]
-[*]Once a day, each employed settler gains training progress in the stat their job uses: farmers Endurance,
-shopkeepers Charisma, industrial workers Strength, martial jobs Agility, power plants Intelligence, and water
-and sanitation Perception. The job-to-stat table is read from SS2 itself, so add-on plot types are included.
+[*]Once a day, each worker gains training progress in the stat their job uses: farmers Endurance, shopkeepers
+Charisma, industrial workers Strength, guards Agility, power plants Intelligence, and water and sanitation
+Perception. The job-to-stat table is read from SS2 itself, so add-on plot types that SS2 links to a stat are included.
+[*]Jobs SS2 doesn't link to a stat don't train: municipal services (hospital, caravan, communications, cemetery,
+power transfer, tax), watchtowers, outposts and HQ departments.
 [*]By default one day of work counts as a quarter of a day at a training plot. Work and recreation training add up.
-[*]SS2 applies the stat increase itself, so caps and plot bonuses work exactly as in SS2.
+[*]SS2 applies the stat increase itself on its next pass over that settler, so caps and plot bonuses work exactly as
+in SS2. Expect the increase up to a day after the progress is earned.
 [*]No SS2 or Workshop Framework scripts are replaced. It's a single small ESL-flagged plugin and one script.
 [/list]
 
 [b]Requirements[/b]: Sim Settlements 2 (All Chapters Pack) and Workshop Framework. F4SE not required.
 
-[b]Settings[/b] (console):
-[code]setpqv AISS2LOJ_JobTrainingQuest fJobTrainingRate 0.5
-setpqv AISS2LOJ_JobTrainingQuest bEnabled 0[/code]
+[b]Settings[/b] (console, saved with your game):
+[list]
+[*][code]setpqv AISS2LOJ_JobTrainingQuest fDailyProgress 0.5[/code] training per day of work (default 0.25; 0 turns it off)
+[*][code]setpqv AISS2LOJ_JobTrainingQuest iMaxLevel 6[/code] work only trains up to this level (default 10); training plots can go higher
+[*][code]setpqv AISS2LOJ_JobTrainingQuest bLoggingEnabled 1[/code] log each daily run to Logs\Script\User\LearningOnTheJob.0.log
+[/list]
 
-[b]Install / uninstall[/b]: install with a mod manager, load after SS2. Safe to add mid-game. To uninstall, set
-bEnabled to 0, save, then remove (stats already gained stay).
+[b]Install / uninstall[/b]: install with a mod manager, load after SS2. Safe to add mid-game. To stop job training,
+set fDailyProgress to 0 (stats already gained stay).
 
 [b]Credits[/b]: kinggath and the Sim Settlements team for SS2 and Workshop Framework.
 ```
 
-The uninstall advice and "safe to add mid-game" are claims; confirm them in testing before publishing.
+"Safe to add mid-game" is confirmed: the 2026-10-18 tests added it to an existing save. There's no `bEnabled`
+property in the hand-written script, so the page suggests `fDailyProgress 0` instead (the daily run still happens but
+changes nothing). Removing the plugin from a save in progress hasn't been tested, so the page doesn't recommend it.
 Update the settings section once MCM lands.

@@ -13,8 +13,24 @@ In SS2 itself, stats only train on recreational training plots.
 
 ## Settings
 
-To be documented once the hand-written script settles. The quest's editor ID is `AISS2LOJ_JobTrainingQuest`, so
-script properties can be inspected with `sqv AISS2LOJ_JobTrainingQuest` and changed with `setpqv`.
+Settings are properties on the quest `AISS2LOJ_JobTrainingQuest`. Use the console to view them with
+`sqv AISS2LOJ_JobTrainingQuest` and change them with `setpqv AISS2LOJ_JobTrainingQuest <name> <value>`.
+Changes are saved with the game.
+
+| Property | Default | What it does |
+|---|---|---|
+| `fDailyProgress` | 0.25 | Training progress per day of work, in days of training-plot time. 0 turns job training off. |
+| `iMaxLevel` | 10 | Work stops adding progress once a settler has earned this level of the job's stat. Training plots can still raise it further. |
+| `bLoggingEnabled` | 0 | 1 writes a log of each daily run to `Documents\My Games\Fallout4\Logs\Script\User\LearningOnTheJob.0.log` (needs Papyrus logging enabled in the INI). |
+
+Which jobs train: those whose plot class appears in SS2's stat table (`PlotManager.PlotSpecialStatAdjustments`), which
+covers agricultural, commercial, industrial (except Production), martial guard jobs, power and water/sanitation plants.
+Municipal service jobs (hospital, caravan, communications, cemetery, power transfer, tax), watchtowers, outposts and HQ
+departments get nothing.
+
+Timing: the mod adds progress once a day. The stat itself goes up when SS2 next processes that settler, on its own
+daily pass or when you enter the settlement, so expect up to a day's delay, plus however long SS2's pass takes in a
+large settlement.
 
 ## Naming
 

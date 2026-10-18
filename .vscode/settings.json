@@ -1,0 +1,14 @@
+{
+    // mr-andersen "Papyrus Compiler" extension. Its compile commands always pass -f/-i/-o on the command line, even
+    // for "Compile Project", so these must match SS2LearnOnTheJob.ppj. Paths are relative to the workspace root
+    // (its terminal starts there). The compiler path stays in your user settings.
+    "mrandersen.papyrus.compiler.projectFile": "SS2LearnOnTheJob.ppj",
+    "mrandersen.papyrus.compiler.flags": "Institute_Papyrus_Flags.flg",
+    "mrandersen.papyrus.compiler.import": "source/scripts;source/stubs;extracted/papyrus-base",
+    "mrandersen.papyrus.compiler.sourceDir": "source/scripts",
+    "mrandersen.papyrus.compiler.output": "build/package/Scripts",
+
+    // The Papyrus extension's Pyro task provider wants Game="fo4" in the .ppj, which the CK compiler rejects.
+    // Pyro tasks aren't used here (tools/build.sh builds), so skip task detection rather than warn on every task run.
+    "task.autoDetect": "off"
+}

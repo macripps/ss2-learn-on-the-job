@@ -1,0 +1,15 @@
+<?xml version='1.0'?>
+<!-- Papyrus project: used by tools/build.sh to compile and by the VS Code Papyrus extension for autocomplete.
+     source/stubs only provides SS2 type signatures; it is never shipped. F4SE sources are deliberately not
+     imported, so the mod can't come to depend on F4SE. -->
+<PapyrusProject xmlns="PapyrusProject.xsd" Flags="Institute_Papyrus_Flags.flg"
+                Output="build/package/Scripts" Optimize="true">
+  <Imports>
+    <Import>source/scripts</Import>
+    <Import>source/stubs</Import>
+    <Import>extracted/papyrus-base</Import>
+  </Imports>
+  <Folders>
+    <Folder>source/scripts</Folder>
+  </Folders>
+</PapyrusProject>

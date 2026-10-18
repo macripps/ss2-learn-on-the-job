@@ -15,10 +15,8 @@ fi
 rm -rf build dist
 mkdir -p "$STAGE/Scripts/Source/User" dist
 
-# source/stubs only provides SS2 type signatures for the compiler; it is never shipped.
-# F4SE sources are deliberately not on the import path so the mod can't come to depend on F4SE.
-"$PAPYRUS_COMPILER" "AISS2LearnOnTheJob:JobTrainingQuest" -f="Institute_Papyrus_Flags.flg" \
-  -i="source/scripts;source/stubs;extracted/papyrus-base" -o="$STAGE/Scripts" -op
+# Imports, flags and output dir ($STAGE/Scripts) live in the project file, shared with the VS Code extension.
+"$PAPYRUS_COMPILER" SS2LearnOnTheJob.ppj
 
 "$PYTHON" -I tools/build_plugin.py "$STAGE/SS2LearnOnTheJob.esp"
 cp -r source/scripts/. "$STAGE/Scripts/Source/User/"
